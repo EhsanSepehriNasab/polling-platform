@@ -134,7 +134,6 @@ polling-platform/
 - **Request Body**:
     ```json
     {
-        "userId": 999,
         "optionIndex": 1
     }
     ```

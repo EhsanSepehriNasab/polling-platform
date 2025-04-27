@@ -1,5 +1,12 @@
 basePath: /
 definitions:
+  models.OptionResult:
+    properties:
+      count:
+        type: integer
+      option:
+        type: string
+    type: object
   models.Poll:
     properties:
       createdAt:
@@ -16,6 +23,57 @@ definitions:
         type: array
       title:
         type: string
+      updated_at:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  models.PollRequest:
+    properties:
+      options:
+        items:
+          type: string
+        type: array
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+  models.PollResults:
+    properties:
+      pollId:
+        type: integer
+      votes:
+        items:
+          $ref: '#/definitions/models.OptionResult'
+        type: array
+    type: object
+  models.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.UserSignUp:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+    type: object
+  polls.VoteRequest:
+    properties:
+      optionIndex:
+        type: integer
     type: object
 host: localhost:8080
 info:
@@ -25,17 +83,66 @@ info:
   version: "1.0"
 paths:
   /polls:
+    get:
+      consumes:
+      - application/json
+      description: This endpoint retrieves a list of polls that the user has not voted
+        on or skipped, filtered by optional tag, with pagination support.
+      parameters:
+      - description: User ID of the creator
+        in: header
+        name: userId
+        required: true
+        type: integer
+      - description: Filter by tag
+        in: query
+        name: tag
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Number of items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Poll'
+            type: array
+        "400":
+          description: Invalid request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Retrieve a list of polls for the user's feed
+      tags:
+      - polls
     post:
       consumes:
       - application/json
-      description: This endpoint creates a new poll with a title, options, and tags.
+      description: This endpoint creates a new poll with a title, options, tags, and
+        an associated user.
       parameters:
+      - description: User ID of the creator
+        in: header
+        name: userId
+        required: true
+        type: integer
       - description: Poll object
         in: body
         name: poll
         required: true
         schema:
-          $ref: '#/definitions/models.Poll'
+          $ref: '#/definitions/models.PollRequest'
       produces:
       - application/json
       responses:
@@ -54,4 +161,146 @@ paths:
       summary: Create a new poll
       tags:
       - polls
+  /polls/{pollID}/skip:
+    post:
+      consumes:
+      - application/json
+      description: Allows a user to skip a poll without voting.
+      parameters:
+      - description: User ID
+        in: header
+        name: userId
+        required: true
+        type: integer
+      - description: Poll ID
+        in: path
+        name: pollID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Poll skipped successfully
+          schema:
+            type: string
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "409":
+          description: User already skipped or voted on this poll
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Skip a poll
+      tags:
+      - polls
+  /polls/{pollID}/stats:
+    get:
+      consumes:
+      - application/json
+      description: This endpoint retrieves the results of a specific poll, including
+        the number of votes for each option.
+      parameters:
+      - description: Poll ID
+        in: path
+        name: pollID
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Poll results with option votes
+          schema:
+            $ref: '#/definitions/models.PollResults'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Get results for a poll
+      tags:
+      - polls
+  /polls/{pollID}/vote:
+    post:
+      consumes:
+      - application/json
+      description: Allows a user to vote for a specific poll option.
+      parameters:
+      - description: User ID
+        in: header
+        name: userId
+        required: true
+        type: integer
+      - description: Poll ID
+        in: path
+        name: pollID
+        required: true
+        type: integer
+      - description: Vote Request
+        in: body
+        name: voteRequest
+        required: true
+        schema:
+          $ref: '#/definitions/polls.VoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Vote successful
+          schema:
+            type: string
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "409":
+          description: Already voted
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Vote for a poll option
+      tags:
+      - polls
+  /users/register:
+    post:
+      consumes:
+      - application/json
+      description: This endpoint registers a new user with a name and email.
+      parameters:
+      - description: User object
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.UserSignUp'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Invalid request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Register a new user
+      tags:
+      - users
 swagger: "2.0"
