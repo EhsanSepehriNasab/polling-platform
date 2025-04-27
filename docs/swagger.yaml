@@ -1,0 +1,57 @@
+basePath: /
+definitions:
+  models.Poll:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: integer
+      options:
+        items:
+          type: string
+        type: array
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API for managing polls.
+  title: Polling Platform API
+  version: "1.0"
+paths:
+  /polls:
+    post:
+      consumes:
+      - application/json
+      description: This endpoint creates a new poll with a title, options, and tags.
+      parameters:
+      - description: Poll object
+        in: body
+        name: poll
+        required: true
+        schema:
+          $ref: '#/definitions/models.Poll'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Poll'
+        "400":
+          description: Invalid request
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Create a new poll
+      tags:
+      - polls
+swagger: "2.0"
