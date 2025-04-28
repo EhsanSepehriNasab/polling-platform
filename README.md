@@ -4,6 +4,22 @@
 
 The **Polling Platform** is a scalable and interactive system designed to handle high concurrency with support for both mobile and web clients. It allows users to participate in polls, skip polls, and filter them by tags, with a daily voting limit of 100 votes per user.
 
+Certainly! I'll format the concurrency & RPS results into a table and incorporate it into your README under the relevant section. Here's how it would look:
+
+
+## Concurrency & RPS Results
+
+The following table shows the results from load testing with varying levels of concurrency and the corresponding request rates (RPS), average response times, and 95th percentile response times:
+
+| Stage (Concurrency) | RPS (Requests/sec) | Avg Resp Time (ms) | P95 Resp Time (ms) |
+|---------------------|--------------------|--------------------|--------------------|
+| 10                  | 9.91               | 6.89               | 24.15              |
+| 20                  | 19.88              | 5.07               | 19.52              |
+| 50                  | 49.38              | 7.16               | 25.58              |
+| 100                 | 98.79              | 9.24               | 44.85              |
+
+
+
 ## Key Features
 
 - **Poll Creation**: Users can create polls with multiple-choice options and tags.
@@ -64,7 +80,7 @@ polling-platform/
 ├── prometheus.yml           # Prometheus config
 ├── load_test.js             # Script for load tests
 ├── Dockerfile               # Dockerfile for polling service
-
+├── load_test_summary.json   # Result of load test
 
 
 ```
