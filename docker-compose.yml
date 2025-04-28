@@ -1,6 +1,29 @@
 version: '3.8'
 
 services:
+  # Polling API Service
+  polling-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: polling-service
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+    networks:
+      - app-network
+    command: ["./main"]
+
+  # PostgreSQL Database
   postgres:
     image: postgres:14
     container_name: postgres
@@ -15,7 +38,14 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 30s
+      retries: 3
+      start_period: 30s
+      timeout: 10s
 
+  # Redis Cache
   redis:
     image: redis:6
     container_name: redis
@@ -24,10 +54,28 @@ services:
       - "6379:6379"
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      retries: 3
+      start_period: 30s
+      timeout: 10s
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:v2.26.0
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
 
 networks:
   app-network:
     driver: bridge
-    
-volumes:
-  postgres_data:

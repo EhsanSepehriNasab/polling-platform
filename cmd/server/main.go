@@ -14,10 +14,11 @@ import (
 	"github.com/EhsanSepehriNasab/polling-platform/internal/cache"
 	"github.com/EhsanSepehriNasab/polling-platform/internal/config"
 	"github.com/EhsanSepehriNasab/polling-platform/internal/db"
+	"github.com/EhsanSepehriNasab/polling-platform/internal/metrics"
 	"github.com/EhsanSepehriNasab/polling-platform/internal/polls"
 	"github.com/EhsanSepehriNasab/polling-platform/internal/users"
-
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -34,6 +35,12 @@ func main() {
 	cache.InitRedis() // Ensure Redis is initialized before starting the server
 
 	r := chi.NewRouter()
+
+	// Attach metrics middleware
+	r.Use(metrics.MetricsMiddleware)
+
+	// Expose /metrics for Prometheus
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Swagger UI endpoint
 	r.Get("/swagger/*", httpSwagger.WrapHandler)

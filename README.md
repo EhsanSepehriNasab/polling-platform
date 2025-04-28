@@ -1,31 +1,28 @@
-
 # Polling Platform
 
 ## Overview
 
-The **Polling Platform** is a massively interactive polling system designed to handle high read/write concurrency, with support for mobile and web clients. The platform allows users to vote on polls, skip polls, and filter them by tags. It also enforces a daily vote limit of 100 votes per user.
+The **Polling Platform** is a scalable and interactive system designed to handle high concurrency with support for both mobile and web clients. It allows users to participate in polls, skip polls, and filter them by tags, with a daily voting limit of 100 votes per user.
 
-## Features Implemented
+## Key Features
 
-1. **Poll Creation**: Users can create polls with multiple-choice options and tags.
-2. **Poll Feed**: Users can view a feed of polls filtered by tags, without seeing the same poll twice.
-3. **Vote**: Users can vote on a poll, selecting one option. A vote is recorded for each poll.
-4. **Skip**: Users can skip a poll without voting.
-5. **Poll Statistics**: Aggregate vote counts per poll option can be retrieved.
-6. **Rate Limiting**: Users can vote on up to 100 polls per day.
-7. **API Documentation**: Swagger-based documentation for testing the API endpoints.
+- **Poll Creation**: Users can create polls with multiple-choice options and tags.
+- **Poll Feed**: Users can view polls filtered by tags, ensuring no repeat polls.
+- **Voting**: Users can vote on a poll, selecting one option per poll.
+- **Skipping**: Users can skip polls without voting.
+- **Poll Statistics**: Aggregate vote counts for each poll option are available.
+- **Rate Limiting**: Users are limited to 100 votes per day.
+- **API Documentation**: Interactive API docs are provided via Swagger UI for easy testing and exploration.
 
 ## Tech Stack
 
-- **Backend**: Go (Golang)
-- **Database**: PostgreSQL (for relational data management, including polls, options, votes, and users)
-- **Caching**: Redis (for in-memory caching of popular polls and stats)
-- **Metrics & Monitoring**: Prometheus for observability
-- **API Documentation**: Swagger UI for interactive API documentation
+- **Backend**: Go (Golang) v1.24
+- **Database**: PostgreSQL v14 (storing relational data for polls, options, votes, and users)
+- **Caching**: Redis v6 (for cache & fast access to frequently queried polls and stats)
+- **Metrics & Monitoring**: Prometheus for system observability
+- **API Docs**: Swagger UI for API testing and documentation
 - **Routing**: Chi Router
-- **ORM**: GORM for PostgreSQL interactions and migrations
-- **Testing**: Unit tests and integration tests for business logic and database interactions
-- **Containerization**: Docker and Docker Compose for containerized services
+- **Containerization**: Docker and Docker Compose for local development environments
 
 ---
 
@@ -36,27 +33,40 @@ polling-platform/
 ├── cmd/
 │   └── server/
 │       └── main.go          # Main entry point for the server
-├── docs/                    # Swagger docs
+├── docs/                    # Swagger documentation files
 ├── internal/
 │   ├── db/                  
-│   │   └── db.go            # Database connection & migrations
-│   ├── config/                  
-│   │   └── config.go        # Setting config
+│   │   └── db.go            # Database connection 
+│   │   └── migrate.go       # Database migrations
+│   ├── config/              
+│   │   └── config.go        # Configuration settings
 │   ├── polls/
 │   │   ├── handler.go       # HTTP request handlers for polls
 │   │   ├── repository.go    # Poll repository (data access layer)
-│   │   └── service.go       # Business logic for handling polls
+│   │   └── service.go       # Business logic for polls
+│   ├── users/
+│   │   ├── handler.go       # HTTP request handlers for users
+│   │   ├── repository.go    # users repository (data access layer)
+│   │   └── service.go       # Business logic for users
 │   ├── cache/               
-│   └   └── redis.go         # Redis caching for frequently accessed data
-│   └── metrics/
-│   └  └── prometheus.go     # Prometheus integration for metrics
-├── └── models/
-│       └── poll.go          # Poll data model
-│       
+│   │   └── redis.go         # Redis caching for popular data
+│   ├── metrics/
+│   │   └── prometheus.go    # Prometheus integration for metrics
+├── models/
+│   └── poll.go              # Poll data model
+│   └── user.go              # User data model
 ├── go.mod                   # Go module dependencies
 ├── go.sum                   # Go module checksums
-├── docker-compose.yml       # Docker Compose setup for local development
+├── docker-compose.yml       # Local Docker Compose setup
 ├── README.md                # Project documentation
+├── .env                     # Environment vars
+├── concurrency&RPS.txt      # Response times vs. concurrency/RPS Results from k6
+├── prometheus.yml           # Prometheus config
+├── load_test.js             # Script for load tests
+├── Dockerfile               # Dockerfile for polling service
+
+
+
 ```
 
 ---
@@ -76,27 +86,42 @@ polling-platform/
    cd polling-platform
    ```
 
-2. **Setup environment variables**:
-   Create a `.env` file with the following environment variables:
+2. **Set up environment variables**:
+   Create a `.env` file with the following content:
    ```env
-   PORT=8080
-   DATABASE_URL=postgres://user:password@localhost:5432/polling_platform?sslmode=disable
-   REDIS_URL=localhost:6379
+    DATABASE_URL=postgres://postgres:postgres@postgres:5432/polling_platform
+    PORT=8080
+    REDIS_ADDR=redis:6379
+    REDIS_PASSWORD=
+    REDIS_DB=0
    ```
 
-3. **Start the application using Docker**:
-   Run the following command to start the app along with its dependencies (PostgreSQL, Redis, and Prometheus) in Docker containers:
+3. **Start the application with Docker**:
+   To start the app and its dependencies (PostgreSQL, Redis, and Prometheus) in Docker containers, run:
    ```bash
-   docker-compose up --build
+   docker-compose up --build -d
    ```
 
-4. **Migrations**:  
-   Migrations will be automatically run upon startup to create the necessary database schema.
+4. **Database Migrations**:  
+   Migrations will automatically run on startup to set up the necessary database schema.
 
 5. **API Documentation**:  
-   Once the server is running, you can access the Swagger UI to test your API endpoints:
+   Once the server is running, you can access the interactive Swagger UI to test API endpoints:
    ```
    http://localhost:8080/swagger/index.html
+   ```
+
+6. **Prometheus metrics**:  
+   Once the server is running, you can access the Prometheus metrics:
+
+   Prometheus panel: 
+   ```
+   http://localhost:9090/
+   ```
+
+   Metrics endpoint: 
+   ```
+   http://localhost:8080/metrics/
    ```
 
 ---
@@ -106,6 +131,10 @@ polling-platform/
 ### 1. Create Poll
 
 - **Endpoint**: `POST /polls`
+- **Request Header**:
+  ```
+  userId: int
+  ```
 - **Request Body**:
     ```json
     {
@@ -120,21 +149,29 @@ polling-platform/
 ### 2. Retrieve Polls for Feed
 
 - **Endpoint**: `GET /polls`
+- **Request Header**:
+  ```
+  userId: int
+  ```
 - **Query Parameters**:
     - `tag` (optional): Filter by tag
     - `page` (optional): Page number for pagination
     - `limit` (optional): Number of polls per page
-    - `userId` (required): The ID of the user requesting the feed
 
-- **Response**: Returns a list of polls that the user has not yet voted or skipped.
+- **Response**: Returns a list of polls that the user has not yet voted on or skipped.
 
 ### 3. Vote on a Poll
 
-- **Endpoint**: `POST /polls/{id}/vote`
+- **Endpoint**: `POST /polls/{pollId}/vote`
+- **Request Header**:
+  ```
+  userId: int
+  ```
+  
 - **Request Body**:
     ```json
     {
-        "optionIndex": 1
+        "optionIndex": 0
     }
     ```
 
@@ -142,19 +179,17 @@ polling-platform/
 
 ### 4. Skip a Poll
 
-- **Endpoint**: `POST /polls/{id}/skip`
-- **Request Body**:
-    ```json
-    {
-        "userId": 999
-    }
-    ```
+- **Endpoint**: `POST /polls/{pollId}/skip`
+- **Request Header**:
+  ```
+  userId: int
+  ```
 
 - **Response**: `200 OK` or `204 No Content`
 
 ### 5. Poll Statistics
 
-- **Endpoint**: `GET /polls/{id}/stats`
+- **Endpoint**: `GET /polls/{pollId}/stats`
 - **Response**:
     ```json
     {
@@ -173,59 +208,78 @@ polling-platform/
 
 ### Database
 
-- **PostgreSQL** is used to store data regarding polls, options, votes, and user activity.
+- **PostgreSQL** stores all relational data related to polls, options, votes, and users.
 - **Schema**: 
-    - **Polls**: Stores poll metadata (title, tags).
-    - **Options**: Stores options for each poll.
-    - **Votes**: Stores individual votes, linked to a user and an option.
-    - **Users**: Stores user information.
-- **Migrations** are handled using `golang-migrate`.
+    - **Polls**: Stores metadata like title and tags.
+    - **Options**: Stores the possible choices for each poll.
+    - **Votes**: Links individual votes to a user and option.
+    - **Users**: Stores user-specific information.
+- Migrations are managed automatically.
 
 ### Caching
 
-- **Redis** is used for caching frequently accessed data like popular polls and aggregated stats, improving response time for these operations.
-- Cache invalidation is handled during vote and skip operations.
+- **Redis** provides in-memory caching for frequently accessed data, such as popular polls and aggregated stats, improving performance.
+- Cache invalidation occurs when votes are cast or polls are skipped or poll created.
 
 ### API Documentation
 
-- **Swagger** is used for generating interactive API documentation. This allows for testing and exploring the API directly from the browser.
+- **Swagger UI** offers an interactive interface for exploring and testing the API directly from your browser.
 
 ### Metrics & Observability
 
-- **Prometheus** is used for gathering performance metrics (request counts, latencies, cache hits/misses, etc.) to monitor the health and performance of the system.
-- Metrics are exposed at the `/metrics` endpoint, where Prometheus can scrape them.
+- **Prometheus** is used for monitoring system performance, such as request counts, latencies, and cache hit/miss ratios. Metrics are exposed at `/metrics` for scraping.
 
 ---
 
 ## Future Enhancements
 
-1. **Real-Time Updates**: Integrate with WebSockets or long-polling to provide real-time vote updates to users.
-2. **Advanced Poll Types**: Allow multi-stage polls (e.g., users vote on multiple questions sequentially) and real-time leaderboards.
-3. **Improved Caching**: Use a distributed caching solution to scale with a growing user base.
-4. **Scalability**: Add support for horizontal scaling (e.g., using Kubernetes for auto-scaling).
+1. **Real-Time Updates**: Implement WebSockets or long-polling to deliver live vote updates.
+2. **Advanced Poll Types**: Enable multi-stage polls and real-time leaderboards.
+3. **Enhanced Caching**: Explore distributed caching for scalability.
+4. **Scalability**: Add support for horizontal scaling via technologies like Kubernetes.
 
 ---
 
 ## Assumptions & Trade-offs
 
-- **Database Choice**: PostgreSQL was chosen for its strong consistency guarantees and efficient relational queries, though it may not be as scalable as NoSQL solutions for some use cases.
-- **Caching**: Redis is used to improve read performance but adds complexity around cache invalidation.
-- **Rate Limiting**: A hard limit of 100 votes per day was enforced on users to ensure fair usage. This could be made more flexible in the future (e.g., adding per-user rate limits based on activity).
-
----
-
-## Running Tests
-
-To run the tests, you can use the `go test` command:
-
-```bash
-go test ./...
-```
+- **Database Choice**: PostgreSQL provides strong consistency and relational query capabilities, but it may face scalability challenges with very high traffic.
+- **Caching**: Redis improves read performance but requires careful management of cache invalidation.
+- **Rate Limiting**: The current 100 votes per day cap is fixed but could be made more flexible in the future.
 
 ---
 
 ## Conclusion
 
-This project implements a highly interactive polling platform that scales efficiently while ensuring data consistency and performance. It uses a combination of PostgreSQL, Redis, and Prometheus to handle high concurrency and maintain robust observability.
+The Polling Platform provides a scalable and efficient solution for interactive polling, leveraging PostgreSQL, Redis, and Prometheus to handle high concurrency while maintaining performance and observability.
 
 ---
+
+## Future Scaling & Evolution
+
+### Scaling for More Users
+
+- **Horizontal Scaling**: Implement load balancing and microservices to better distribute traffic and isolate services.
+- **Caching**: Use CDNs and Redis to cache frequently accessed data.
+- **Database Scaling**: Introduce read replicas or consider NoSQL databases like MongoDB for better scalability.
+
+### Supporting Complex Poll Types
+
+- **Multi-Stage Polls**: Allow sequential voting with session tracking.
+- **Real-Time Leaderboards**: Use WebSockets to update leaderboards live.
+
+### Future Features
+
+- **Gamification**: Add badges and leaderboards to encourage user engagement.
+- **Personalized Polls**: Suggest polls based on user history using machine learning.
+- **Poll Results as NFTs**: Reward participants with NFTs for exclusive polls.
+
+---
+
+## Areas for Refactoring & Technical Debt
+
+- **Metrics Collection**: Centralize logic for better maintainability and extend with more granular metrics.
+- **Caching**: Improve cache eviction strategies and implement fallback mechanisms.
+- **Database Performance**: Optimize slow queries and consider asynchronous job processing.
+- **Error Handling**: Implement custom error types and structured logging for improved visibility.
+- **Concurrency**: Optimize concurrency handling with worker pools for better throughput.
+- **EventSreaming**: Using kafka to write poll reqeust in queue and have better performance in high scaling.

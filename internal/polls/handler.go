@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/EhsanSepehriNasab/polling-platform/internal/cache"
+	"github.com/EhsanSepehriNasab/polling-platform/internal/metrics"
 	"github.com/EhsanSepehriNasab/polling-platform/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-redis/redis/v8"
@@ -92,6 +93,12 @@ func (h *PollHandler) CreatePoll(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} string "Internal server error"
 // @Router /polls [get]
 func (h *PollHandler) PollFeedHandler(w http.ResponseWriter, r *http.Request) {
+	start := time.Now() // For PollFeedDuration
+	defer func() {
+		duration := time.Since(start).Seconds()
+		metrics.PollFeedDuration.Observe(duration)
+	}()
+
 	// Get query parameters
 	userIDStr := r.Header.Get("userId")
 	tag := r.URL.Query().Get("tag")
@@ -107,12 +114,12 @@ func (h *PollHandler) PollFeedHandler(w http.ResponseWriter, r *http.Request) {
 
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
-		page = 1 // Default to page 1
+		page = 1
 	}
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 1 {
-		limit = 10 // Default to 10 items per page
+		limit = 10
 	}
 
 	// Check Redis cache for the feed
@@ -120,21 +127,32 @@ func (h *PollHandler) PollFeedHandler(w http.ResponseWriter, r *http.Request) {
 	cachedFeed, err := cache.GetCacheClient().Get(context.Background(), cacheKey).Result()
 
 	if err == nil {
-		// Cache hit: return cached feed
+		// Cache hit
+		metrics.CacheHits.Inc()
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(cachedFeed))
 		return
+	} else {
+		// Cache miss
+		metrics.CacheMisses.Inc()
 	}
 
-	// Retrieve the polls for the feed using the service
+	// Time the DB query
+	dbStart := time.Now()
+
 	polls, err := h.service.GetPollsForFeed(r.Context(), userID, tag, page, limit)
+
+	dbDuration := time.Since(dbStart).Seconds()
+	metrics.DBQueryDuration.Observe(dbDuration)
+
 	if err != nil {
 		http.Error(w, "Failed to retrieve polls", http.StatusInternalServerError)
 		return
 	}
 
-	// Cache the response for a short period of time (e.g., 1 minute)
+	// Cache the response
 	cachedFeedJSON, err := json.Marshal(polls)
 	if err != nil {
 		http.Error(w, "Failed to encode polls", http.StatusInternalServerError)
@@ -142,7 +160,7 @@ func (h *PollHandler) PollFeedHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	cache.GetCacheClient().Set(context.Background(), cacheKey, cachedFeedJSON, time.Minute*10)
 
-	// Respond with the list of polls
+	// Respond
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(cachedFeedJSON)
@@ -170,11 +188,13 @@ type VoteRequest struct {
 func (h *PollHandler) VotePollHandler(w http.ResponseWriter, r *http.Request) {
 	userIDStr := r.Header.Get("userId")
 	if userIDStr == "" {
+		log.Printf("Missing userId header")
 		http.Error(w, "Missing userId header", http.StatusBadRequest)
 		return
 	}
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
+		log.Printf("Invalid userId header", err)
 		http.Error(w, "Invalid userId header", http.StatusBadRequest)
 		return
 	}
@@ -183,12 +203,14 @@ func (h *PollHandler) VotePollHandler(w http.ResponseWriter, r *http.Request) {
 	redisKey := fmt.Sprintf("user:%d:votes:today", userID)
 	votesToday, err := cache.GetCacheClient().Get(context.Background(), redisKey).Int()
 	if err != nil && err != redis.Nil {
+		log.Printf("Internal server error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	// Allow a user to vote only 100 times a day
 	if votesToday >= 100 {
+		log.Printf("Rate limit exceeded, you can vote up to 100 polls per day")
 		http.Error(w, "Rate limit exceeded, you can vote up to 100 polls per day", http.StatusTooManyRequests)
 		return
 	}
@@ -197,6 +219,7 @@ func (h *PollHandler) VotePollHandler(w http.ResponseWriter, r *http.Request) {
 	pollIDStr := chi.URLParam(r, "pollID")
 	pollID, err := strconv.Atoi(pollIDStr)
 	if err != nil {
+		log.Printf("Invalid poll ID", err)
 		http.Error(w, "Invalid poll ID", http.StatusBadRequest)
 		return
 	}
@@ -205,11 +228,13 @@ func (h *PollHandler) VotePollHandler(w http.ResponseWriter, r *http.Request) {
 		OptionIndex int `json:"optionIndex"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		log.Printf("Invalid request body", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	if payload.OptionIndex < 0 {
+		log.Printf("Option index must be non-negative")
 		http.Error(w, "Option index must be non-negative", http.StatusBadRequest)
 		return
 	}
@@ -218,8 +243,10 @@ func (h *PollHandler) VotePollHandler(w http.ResponseWriter, r *http.Request) {
 	err = h.service.VotePoll(r.Context(), userID, pollID, payload.OptionIndex)
 	if err != nil {
 		if err.Error() == "user has already voted on this poll" {
+			log.Printf("User already voted on this poll", err)
 			http.Error(w, "User already voted on this poll", http.StatusConflict)
 		} else {
+			log.Printf("Failed to vote", err)
 			http.Error(w, "Failed to vote", http.StatusInternalServerError)
 		}
 		return
@@ -263,11 +290,13 @@ func (h *PollHandler) SkipPollHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract userID from the header
 	userIDStr := r.Header.Get("userId")
 	if userIDStr == "" {
+		log.Printf("Missing userId header")
 		http.Error(w, "Missing userId header", http.StatusBadRequest)
 		return
 	}
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
+		log.Printf("Invalid userId header")
 		http.Error(w, "Invalid userId header", http.StatusBadRequest)
 		return
 	}
@@ -276,6 +305,7 @@ func (h *PollHandler) SkipPollHandler(w http.ResponseWriter, r *http.Request) {
 	pollIDStr := chi.URLParam(r, "pollID")
 	pollID, err := strconv.Atoi(pollIDStr)
 	if err != nil {
+		log.Printf("Invalid poll ID")
 		http.Error(w, "Invalid poll ID", http.StatusBadRequest)
 		return
 	}
@@ -284,8 +314,10 @@ func (h *PollHandler) SkipPollHandler(w http.ResponseWriter, r *http.Request) {
 	err = h.service.SkipPoll(r.Context(), userID, pollID)
 	if err != nil {
 		if err.Error() == "user has already voted or skipped this poll" {
+			log.Printf("User already skipped or vote on this poll", err)
 			http.Error(w, "User already voted or skipped this poll", http.StatusConflict)
 		} else {
+			log.Printf("Failed to skip poll", err)
 			http.Error(w, "Failed to skip poll", http.StatusInternalServerError)
 		}
 		return

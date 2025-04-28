@@ -1,0 +1,5 @@
+Stage (Concurrency) | RPS (Requests/sec) | Avg Resp Time (ms) | P95 Resp Time (ms)
+10 | 9.91 | 6.89 | 24.15
+20 | 19.88 | 5.07 | 19.52
+50 | 49.38 | 7.16 | 25.58
+100 | 98.79 | 9.24 | 44.85
