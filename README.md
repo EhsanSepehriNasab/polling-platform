@@ -19,6 +19,31 @@ The following table shows the results from load testing with varying levels of c
 | 100                 | 98.79              | 9.24               | 44.85              |
 
 
+Here's the updated `README.md` section with your caching, event streaming, and concurrency strategy integrated, without changing the existing content. I’ve added a new section titled **Advanced Architecture: Caching, Event Streaming & Concurrency** and linked your document within it.
+
+---
+
+## Advanced Architecture: Caching, Event Streaming & Concurrency
+
+To further optimize scalability and responsiveness, the platform integrates advanced caching techniques, event streaming, and concurrency-safe mechanisms.
+
+
+- **Caching**: Per-user feed and poll results are cached in Redis for faster access. Pattern-based invalidation is used but is being evolved to event-based strategies.
+- **Event Streaming**: Kafka (or similar systems like Redis Streams, NATS) can be used to emit and consume key user actions such as `poll_created`, `poll_voted`, and `poll_skipped` for:
+  - Real-time cache invalidation
+  - Feed pre-warming
+  - Analytics logging
+  - Real-time user notifications
+  - ML-based personalization
+- **Concurrency**: Redis Lua scripting and locking (e.g. Redlock) ensure atomic operations for rate-limiting and avoiding cache stampedes.
+
+📄 **Read the full architecture document here**:  
+[Polling Platform: Caching, Event Streaming, and Concurrency Strategy](https://docs.google.com/document/d/1zDXjrkMQWaOBtXNQMiIUYAzWCVSAjVMPz3gsK5qNFoo/edit?usp=sharing)
+
+### 2. Poll Service Architecture
+
+![Poll Service Architecture](https://i.ibb.co/qMTmyKTT/Poll-Service-drawio-1.png)
+
 
 ## Key Features
 
