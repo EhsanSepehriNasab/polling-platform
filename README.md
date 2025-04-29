@@ -42,8 +42,7 @@ To further optimize scalability and responsiveness, the platform integrates adva
 
 ### 2. Poll Service Architecture
 
-![Poll Service Architecture](https://i.ibb.co/qMTmyKTT/Poll-Service-drawio-1.png)
-
+![Polling Platform: Caching and Event Streaming](https://github.com/EhsanSepehriNasab/polling-platform/raw/main/Polling_Platform_Caching_and_E.png)
 
 ## Key Features
 
